@@ -1,0 +1,484 @@
+@using System.Globalization
+@using HealthCheck.Domain.Services;
+@using HealthCheck.Domain.Models;
+@using HealthCheck.Domain.Extensions;
+@inject HealthService health;
+@{
+    ViewData["Title"] = $"Healthcheck - {ViewBag.Server}";
+    DateTime date = ViewBag.Date;
+    bool hasIndex = ViewBag.HasIndex;
+    int nrOfPeriods = ViewBag.NrOfPeriods;
+    bool isNodeOdd = false;
+    bool isPeriodOdd = false;
+    bool isServerOdd = false;
+    string periodParity = "none";
+    string serverParity = "none";
+    bool isScheduled = false;
+    var isMonthly = health.IntervalName == "Month";
+    bool isActive = true;
+    int currentPeriod = health.GetCurrentPeriod(date);
+    int serverNumber = -1;
+    var errors = (Dictionary<int, string>)ViewBag.Errors;
+    var stateOverride = health.GetStateOverride();
+    var oddText = "<span class=\"parity-odd\">odd</span>";
+    var evenText = "<span class=\"parity-even\">even</span>";
+    var updateOnDates = new List<string>();
+
+    var dateCssClass = date.Date == DateTime.Now.Date ? "" : "sn-red fw-bold";
+    var stateCssClass = stateOverride == BaseTypes.ServerStatus.Automatic ? "" : "sn-red fw-bold";
+
+    var nextStartDay = ViewBag.StartDays[0];
+    if (!isMonthly)
+    {
+        List<int> startDays = ViewBag.StartDays;
+        nextStartDay = currentPeriod < startDays.Count ? startDays[currentPeriod] : startDays[0];
+    }
+
+    var nextDateRange = health.GetDateRange(date, nextStartDay, stateOverride);
+    var lastDayOfMonth = health.GetLastDayOfMonth(date);
+    var interval = health.GetInterval();
+
+    if (hasIndex)
+    {
+        serverNumber = ViewBag.ServerNodeIndex;
+        isNodeOdd = hasIndex ? Utility.IsOdd(serverNumber) : false;
+        isPeriodOdd = hasIndex ? Utility.IsOdd(currentPeriod) : false;
+        isServerOdd = hasIndex ? Utility.IsOdd(serverNumber) : false;
+        periodParity = isPeriodOdd ? "odd" : "even";
+        serverParity = isServerOdd ? "odd" : "even";
+        isScheduled = !health.IsActive(currentPeriod, isNodeOdd);
+        isActive = ViewBag.Status == BaseTypes.ServerStatus.Active;
+    }
+
+    string ScheduledCssClass(int period)
+    {
+        var result = "";
+
+        if (currentPeriod == period)
+        {
+            var isScheduled = !health.IsActive(period, isNodeOdd);
+            result = !isActive && isScheduled && !ViewBag.IsPending ? "ud-yes" : "ud-no";
+        }
+
+        return result;
+    }
+
+    string GetParityText(string parity)
+    {
+        var result = $"<span class=\"parity-{parity}\">{parity}</span>";
+        return result;
+    }
+}
+
+<a id="top" name="top"></a>
+<br />
+
+<div class="row">
+    <div class="col-10">
+        <h1 class="fw-bold">Healthcheck for server @serverNumber</h1>
+    </div>
+    <div class="col-2 text-end">
+        <a id="refresh" class="btn btn-primary form-control" style="margin: -12px; width: 70px; height: 40px" href="/info">
+            <svg id="Layer_1" width="20" height="20" fill="currentColor" data-name="refresh" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                <path d="M66.71,287.91H0v160l47.36-43.59A255.71,255.71,0,0,0,255.9,512C386.54,512,494.19,414.15,510,287.91H445.29A192,192,0,0,1,95,360.6l79.08-72.69Zm0,0" fill="#fff" />
+                <path d="M255.9,0C125.46,0,17.64,97.63,2,224H66.71a192,192,0,0,1,353.26-68l-68,68H512v-160l-45.78,45.78A255.89,255.89,0,0,0,255.9,0Zm0,0" fill="#fff" />
+            </svg>
+        </a>
+    </div>
+</div>
+
+@if (hasIndex)
+{
+    <div class="row">
+        <div class="col-12">
+            @if (isActive)
+            {
+                <h3>
+                    @if (isScheduled)
+                    {
+                        <span class="sn sn-green"><b>Server is active. </b></span>
+                        <span class="sn sn-orange">Not ready for updates. </span>
+                        <span class="sn sn-red">Manually set. </span>
+                    }
+                    else
+                    {
+                        @if (@ViewBag.IsPending)
+                        {
+                            <span class="sn sn-orange">Pending Active. </span>
+                        }
+                        else
+                        {
+                            <span class="sn sn-blue"><b>Server is active. </b></span>
+                            <span class="sn sn-orange">Not ready for updates. </span>
+                        }
+                        <span>
+                            @if (ViewBag.HasStateOverride)
+                            {
+                                <span class="sn sn-red">Manually set. </span>
+                            }
+                        </span>
+                    }
+                </h3>
+                <br />
+
+            }
+            else
+            {
+                @if (ViewBag.IsPending)
+                {
+                    <h3>
+                        <span class="sn sn-orange">
+                            @Html.Raw(ViewBag.IsPending ? "Pending Standby. " : "On Standby. ")
+                        </span>
+                        <span>Not ready for updates.</span>
+                    </h3>
+                }
+                else
+                {
+                    <h3>
+                        <span class="sn sn-grey"><b>Server is on standby. </b></span><span class="sn sn-green">Ready for updates. </span>
+                        <span>
+                            @if (ViewBag.HasStateOverride)
+                            {
+                                <span class="sn sn-red">Manually set. </span>
+                            }
+                        </span>
+                    </h3>
+                }
+            }
+            <ul>
+                @if (isActive)
+                {
+                    <li>
+                        This server is @Html.Raw(ViewBag.IsPending ? "pending" : "")
+                        <b>active</b>, @Html.Raw(ViewBag.IsPending ? " on the load-balancer" : "")
+                        because its name ends with an @Html.Raw(isNodeOdd ? oddText : evenText) number and the @health.IntervalName.ToLower() is an @Html.Raw(isPeriodOdd ? oddText : evenText) number.
+                    </li>
+                    @if (isScheduled)
+                    {
+                        <li>Update not recommended for this @health.IntervalName.ToLower()</li>
+                    }
+                    else
+                    {
+                        if (ViewBag.HasStateOverride)
+                        {
+                            <li>Manually set, not on schedule.</li>
+                        }
+                    }
+                }
+                else
+                {
+                    <li>
+                        This server is @Html.Raw(ViewBag.IsPending ? "pending" : "in")
+                        standby mode <span> on the load-balancer</span>
+                    </li>
+                    @if (ViewBag.HasStateOverride)
+                    {
+                        <li>Manually set, not on schedule.</li>
+                    }
+                }
+                <li>A server's state is configured to be <span class="code">@ViewBag.ParityStatusWhenMatched</span> when its number matches an odd or even @health.IntervalName.ToLower(). </li>
+            </ul>
+
+            @if (errors.Count != 0)
+            {
+                <div class="row">
+                    <div class="col-12">
+                        <div class="ud-err">
+                            <div><b>CONFIGURATION ERROR: </b>@(errors.Count > 1 ? "s" : "")</div>
+                            <div>
+                                @foreach (var key in errors.Keys)
+                                {
+                                    <div>@errors[key]</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <br />
+            }
+
+            <div class="row">
+                <div class="col-12">
+
+                    @if (hasIndex)
+                    {
+                        @if (isScheduled)
+                        {
+                            @if (isActive)
+                            {
+                                <p>The server is set to be active in settings, therefore the below schedule does not apply. </p>
+                            }
+                            else
+                            {
+                                <p>
+                                    You may @Html.Raw(ViewBag.IsPending ? $" continue once this server is on standby. " : "proceed to run updates. ")
+                                    @if (!ViewBag.IsPending)
+                                    {
+                                        <span>and restart the server as necessary. </span>
+                                    }
+                                </p>
+                            }
+                        }
+                        else
+                        {
+                            <p class="ud-no">Updates are not recommended in this @health.IntervalName.ToLower(). (Updates to @ViewBag.Server are recommended in the next @health.IntervalName.ToLower()). </p>
+                        }
+                    }
+                </div>
+            </div>
+
+            <table class="table">
+                <tbody>
+                    <tr>
+                        <td style="width: 20%">Today is:</td>
+                        <td style="width: 30%"><span class="code @dateCssClass">@date.ToString("MMM dd, yyyy")</span></td>
+                        <td style="width: 20%">Rotate on days:</td>
+                        <td style="width: 30%"><span class="code">@(String.IsNullOrWhiteSpace(health.GetStartDaysSetting()) ? "1" : health.GetStartDaysSetting())</span></td>
+                    </tr>
+                    <tr>
+                        <td style="width: 20%">Rotate every:</td>
+                        <td><span class="code">@health.IntervalName</span></td>
+                        <td style="width: 20%">Next rotation:</td>
+                        <td><span class="code">@nextDateRange.Start.ToString("MMM d")</span></td>
+                    </tr>
+                    @if (isMonthly)
+                    {
+                        <tr>
+                            <td style="width: 20%">Days in month:</td>
+                            <td><span class="code">@lastDayOfMonth</span></td>
+                            <td style="width: 20%">You are in @date.ToString("MMMM"):</td>
+                            <td><span class="code">@date.Month @Html.Raw(GetParityText(@periodParity))</span></td>
+                        </tr>
+                    }
+                    else
+                    {
+                        <tr>
+                            <td style="width: 20%">You are on day:</td>
+                            <td><span class="code">@date.Day</span></td>
+                            <td style="width: 20%">Range:</td>
+                            <td><span class="code">@currentPeriod @Html.Raw(GetParityText(@periodParity))</span></td>
+                        </tr>
+                    }
+                    <tr>
+                        <td style="width: 20%">Server:</td>
+                        <td style="width: 30%">
+                            @if (ViewBag.HasError)
+                            {
+                                <span>Failed to get active servername: @ViewBag.PendingMessage</span>
+                            }
+                            else
+                            {
+                                <span class="code">@ViewBag.PendingMessage</span>
+                            }
+                        </td>
+                        <td style="width: 20%">Server number:</td>
+                        <td style="width: 30%"><span class="code">@serverNumber @Html.Raw(GetParityText(@serverParity))</span></td>
+                    </tr>
+                    <tr>
+                        <td style="width: 20%">When matched:</td>
+                        <td style="width: 30%"><span class="code">@ViewBag.ParityStatusWhenMatched</span></td>
+                        <td style="width: 20%">Match status:</td>
+                        <td style="width: 30%"><span class="code">@(serverParity == periodParity ? @Html.Raw($"&#10003; {health.IntervalName.ToLower()} &amp; server are {GetParityText(@serverParity)}") : @Html.Raw("&#10007; Not matched"))</span></td>
+                    </tr>
+                    <tr>
+                        <td style="width: 20%">Status:</td>
+                        <td style="width: 30%"><span class="code @stateCssClass">@ViewBag.Status</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<hr />
+
+<div class="row">
+    <div class="col-12">
+        <h4>Update Schedule: @(health.IntervalName)</h4>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        @if (hasIndex)
+        {
+            <p>
+                @ViewBag.ParityStatusWhenMatched when server and @(health.IntervalName.ToLower()) are both odd or even.
+                Servers rotate at midnight, when the number at the end of the server's name and the range are compared.
+            </p>
+            <p>
+                This server (@ViewBag.Server) is scheduled to be <span class="fw-bold">@ViewBag.ParityStatusWhenMatched.ToString().ToLower()</span> on @Html.Raw(isNodeOdd ? oddText : evenText) @(health.IntervalName.ToLower())s.
+                Updates should be done when it is <span class="fw-bold">on standby</span> to avoid downtime.
+            </p>
+
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>&nbsp;</th>
+                        <th scope="col">#</th>
+                        <th scope="col">@health.IntervalName</th>
+                        <th style="text-align: center" title="Scheduled Status">Status</th>
+                        <th style="text-align: center" title="Update recommended, and on which day of the month. ">Update</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < nrOfPeriods; i++)
+                    {
+                        var number = i + 1;
+                        var isOdd = Utility.IsOdd(number);
+                        var isServerMatch = isOdd == isNodeOdd;
+                        var effectiveStatus = @Utility.GetEffectiveStatus(isServerMatch, ViewBag.ParityStatusWhenMatched);
+                        var startDay = ViewBag.StartDays[isMonthly ? 0 : i];
+                        var stateText = ViewBag.HasStateOverride ? $"<b>* Status has been manually set to {Utility.StatusText(@ViewBag.Status)}</b>. " : $"It has therefore been <i>{Utility.StatusText(effectiveStatus).ToLower()}</i> since {date.ToString("MMMM")} {startDay}. ";
+                        var serverMatchText = (isServerMatch ? $", which matches the number at the end of this server's name ({serverNumber}). " : $". The server number {serverNumber} does not correspond to the {health.IntervalName.ToLower()} number {currentPeriod}. ");
+                        var isInPeriod = date.Day >= startDay;
+                        var describeText = isInPeriod ? $"Today, {date.ToString("MMMM d")}, falls in an {(isOdd ? oddText : evenText)} {health.IntervalName.ToLower()} ({currentPeriod}) {serverMatchText}" : "";
+                        var dates = health.GetRangeDates(number, date.Year, date.Month);
+                        var updateOn = effectiveStatus == BaseTypes.ServerStatus.Standby ? health.GetUpdateDate(dates[0], dates[1]).ToString("dd") : "&#10007;";
+
+                        bool isNumeric = double.TryParse(updateOn, out _);
+                        if (isNumeric)
+                            updateOnDates.Add(updateOn);
+
+                        <tr class="@ScheduledCssClass(number) @(isServerMatch ? "this-period" : "not-this-period")">
+                            <td>
+                                @if (currentPeriod == number)
+                                {
+                                    <span style="color: black; float: right; font-weight: 800">&rarr;</span>
+                                }
+                            </td>
+                            <th scope="row">@number</th>
+                            <td>
+                                @if (isMonthly)
+                                {
+                                    <span>@Utility.GetMonthName(number)</span>
+                                }
+                                else
+                                {
+                                    <span style="white-space: nowrap"><b>@dates[0].ToString("dd")</b> - @dates[1].ToString("dd")</span>
+                                }
+                            </td>
+                            <td style="text-align: center">
+                                <span>@effectiveStatus @(currentPeriod == number && isServerMatch && ViewBag.HasStateOverride ? "*" : "")</span>
+                            </td>
+                            <td style="text-align: center">
+                                <span>@Html.Raw(updateOn)</span>
+                            </td>
+                            <td>
+                                @if (currentPeriod == number)
+                                {
+                                    <span style="color: black">@Html.Raw(describeText)@Html.Raw(stateText)</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <p>
+                <span style="color: forestgreen">Recommended days to schedule updates: </span>&nbsp; <b class="code">@String.Join(", ", updateOnDates.Distinct())</b>
+            </p>
+        }
+        else
+        {
+            <p class="ud-no">
+                '@ViewBag.ServerLastChar' was found as the last character in '@ViewBag.Server'.
+                A number is required as the last character.
+                The health check has used the default active node, with a response of "E", indicating an error.
+                Override the 'State' setting as a workaround, or run this app on a server with a valid server name.
+            </p>
+        }
+    </div>
+</div>
+
+<a id="lbe" name="lbe"></a>
+
+<div class="row">
+    <hr />
+    <h4>Healthcheck endpoint</h4>
+    <div class="col-12">
+        <p>The load-balancer monitors the <i>endpoint</i>, which indicates if it should be made active or on standby.</p>
+        <p>Test the healthcheck endpoint below: </p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="endpointOptions" id="epBalanced" value="load-balanced" checked>
+            <label class="form-check-label" for="epBalanced">Live (active) server</label>
+        </div>
+        <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="endpointOptions" id="epIndividual" value="individual">
+            <label class="form-check-label" for="epIndividual">Local server</label>
+        </div>
+    </div>
+</div>
+<br />
+
+<div class="row">
+    <div class="col-9">
+        <input class="form-control" type="text" id="copyTarget" value="@ViewBag.LoadBalancedEndpoint" readonly />
+    </div>
+    <div class="col-3">
+        <p>
+            <button id="endpoint" class="btn btn-secondary form-control">Test in new tab</button>
+        </p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-4">
+        <button id="copyButton" class="btn btn-primary form-control">Copy address to clipboard</button>
+    </div>
+    <div class="col-8">
+        <span id="copyMessage" class="form-control border-0">&nbsp;</span>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <br />
+        <p>
+            <span class="sn-red">HTTP 404</span> - Instructs the load-balancer to place the server on standby.
+        </p>
+        <p>
+            <span class="sn-green">HTTP 200</span> - "OK" indicates that the server is online and should be made active.
+        </p>
+        <p>
+            <span class="sn-green">HTTP 200</span> - "E" indicates, that the server is online and should be made active, but that there is an error.
+        </p>
+        <p>'Pending' will be displayed at the <a href="#top">top of this page</a> if there is a delay in switching states. </p>
+    </div>
+</div>
+
+<div class="row">
+    <hr />
+    <div class="col-12">
+        <h4>Tips</h4>
+        <ol>
+            <li>
+                Monitor the <a href="#lbe"><i>endpoint</i></a> and <b>not this page</b>
+            </li>
+            <li>
+                There should be at least <b>1 active server</b> on the load-balancer.
+            </li>
+
+            <li>Servers should be identical and <b>ready for production</b> </li>
+
+            <li><b>Use shared state</b> for apps that require a session on the server, to prevent the loss of session data. </li>
+            <li><b>Disable automatic updates</b> if a server has been manually activated for an extended period. </li>
+        </ol>
+    </div>
+</div>
+
+<br />
+
+@section Scripts
+{
+    <script type="text/javascript">
+        var individualUrl = "@ViewBag.IndividualEndpoint";
+        var loadBalancedUrl = "@ViewBag.LoadBalancedEndpoint";
+    </script>
+}

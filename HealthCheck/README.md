@@ -1,4 +1,4 @@
-# Health Check Scheduler (HCS)
+ï»¿# Health Check Scheduler (HCS)
 
 ## Description
 The Health Check Scheduler (HCS) determines the active/standby status of servers within a load-balanced cluster. 
@@ -19,8 +19,8 @@ Odd-numbered servers will be offline during odd-numbered maintenance periods.
 The Parity Action setting controls the server's active/standby state based on its parity relative to the maintenance schedule.
 
 Valid values for Parity Action:
-0 (standby – ready for updates)
-1 (active – updates not recommended)
+0 (standby â€“ ready for updates)
+1 (active â€“ updates not recommended)
 
 ## IIS Site Configuration
 
